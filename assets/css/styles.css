@@ -1,0 +1,49 @@
+.project a {
+  text-decoration: none;
+  color: #ffffff;
+}
+
+.project {
+  padding-right: 24px;
+  padding-left: 24px;
+  padding-top: 24px;
+  border-radius: 10px;
+  margin-top: 8px;
+}
+
+.project:hover {
+  background-color: var(--bs-gray-700);
+}
+
+p {
+  /*margin-bottom: -16px;*/
+}
+
+.navbar {
+  position: fixed;
+  top: 0;
+  width: 100%;
+}
+
+@media (min-width:768px) {
+  .navbar-expand-md .navbar-nav .nav-link {
+    padding-right: 1rem;
+    padding-left: 1rem;
+  }
+}
+
+body {
+  margin-top: 72px;
+  background: var(--bs-gray-dark);
+  color: rgb(255,255,255);
+}
+
+h1 {
+  color: rgb(255,255,255);
+  font-size: 50px;
+}
+
+.footer-icons li svg {
+  font-size: 25px;
+}
+
