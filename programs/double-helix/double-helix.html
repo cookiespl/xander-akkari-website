@@ -1,0 +1,393 @@
+<html>
+  <head>
+    <title>Procedural Double-Helix</title>
+  </head>
+
+  <style>
+  body {margin: 0;}
+  canvas {width: 100%; height: 100%;}
+  </style>
+
+  <body>
+	<link rel="shortcut icon" href="#">
+
+   
+    <style>
+    			body {
+    				font-family: Monospace;
+    				background-color: #000;
+    				color: #fff;
+    				margin: 0px;
+    				overflow: hidden;
+    			}
+    			#info {
+    				position: absolute;
+    				top: 10px;
+    				width: 100%;
+    				text-align: center;
+    			}
+    </style>
+
+    <div id="info">
+        <p>This is a procedurally-generated, double-helix strand of deoxyribonucleic acid, created using threeJS.<br>
+            <br>
+            Use the sliders to adjust parameters yourself.<br>
+            Click the Randomise button to generate a completely random strand.<br>
+            <br>
+            Left click - rotate. Right click - pan. Scroll - zoom.</p>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "./build/three.module.js",
+                "gui": "./build/lil-gui.esm.js"
+            }
+        }
+    </script>
+		
+	<script type="module">
+    
+        const lerp = (x, y, a) => x * (1 - a) + y * a;
+        const randomRange = (max, min) => Math.random() * (max - min) + min;
+        const randomColor = () => Math.floor(Math.random()*16777215);
+
+	    import * as THREE from 'three';
+        import * as GUI from 'gui';
+        import { OrbitControls } from './build/controls/OrbitControls.js';
+
+        // create scene and renderer
+        var scene = new THREE.Scene( );
+        var renderer = new THREE.WebGLRenderer( { logarithmicDepthBuffer: true } );
+        renderer.setSize(window.innerWidth,window.innerHeight);
+        document.body.appendChild(renderer.domElement );
+        var ratio = window.innerWidth/window.innerHeight;
+
+        // create camera
+        var camera = new THREE.PerspectiveCamera(45,ratio,0.00001,1000);
+        var Pos = new THREE.Vector3(0,0,20);
+        camera.position.set(Pos.x,Pos.y,Pos.z);
+        var Dir = new THREE.Vector3(0,0,0);
+        camera.lookAt(Dir.x,Dir.y,Dir.z);
+
+        // set up helix parameters (these are also the default values)
+        var t = 0;
+        const helixParam = {
+            rotateSpeed: -3,
+            rotateOffset: 0.2,
+            length: 30,
+            segCount: 50,
+            segSphereRadius: 0.3,
+            segBarRadius: 0.1,
+            segBarGap: 0.8,
+            radius: 3,
+            color0start: 0xffff00,
+            color0end: 0x00ff00,
+            color1start: 0x0000ff,
+            color1end: 0x00ffff,
+            colorbarstart: 0xffffff,
+            colorbarend: 0xffffff,
+            randomise: function()
+            {
+                this.rotateSpeed = randomRange(-10, 10);
+                this.rotateOffset = randomRange(0, 0.5);
+                this.length = randomRange(5, 50);
+                this.segCount = randomRange(15, 150);
+                this.segSphereRadius = randomRange(0, 1);
+                this.segBarRadius = randomRange(0, 0.3);
+                this.segBarGap = randomRange(0, 1);
+                this.radius = randomRange(0.1, 8);
+                this.color0start = randomColor();
+                this.color0end = randomColor();
+                this.color1start = randomColor();
+                this.color1end = randomColor();
+                this.colorbarstart = randomColor();
+                this.colorbarend = randomColor();
+
+                ResetHelix();
+                StabiliseRotationSpeed();
+            }
+        }
+        
+        // set up GUI
+        const gui = new GUI.GUI()
+            .title('Helix Controls');
+
+        gui.add(helixParam, 'segCount', 15, 200)
+            .name('Segments')
+            .listen()
+            .onChange(value => {
+                ResetHelix();
+            });
+        gui.add(helixParam, 'rotateOffset', 0, 0.5)
+            .name('Tightness')
+            .listen();
+        gui.add(helixParam, 'length', 5, 50)
+            .name('Length')
+            .listen();
+        gui.add(helixParam, 'radius', 0.1, 8)
+            .name('Radius')
+            .listen()
+            .onChange(value => {
+                meshArray.forEach(SetSegSphereRadius);
+            });
+        gui.add(helixParam, 'rotateSpeed', -10, 10)
+            .name('Rotation Speed')
+            .listen()
+            .onChange(value => {
+                StabiliseRotationSpeed();
+            });
+
+        const folderSizes = gui.addFolder('Sizes')
+        folderSizes.add(helixParam, 'segSphereRadius', 0, 1)
+            .name('Molecule Size')
+            .listen()
+            .onChange(value => {
+                meshArray.forEach(SetSegSphereRadius);
+            });
+        folderSizes.add(helixParam, 'segBarRadius', 0, 0.3)
+            .name('Link Thinkness')
+            .listen()
+            .onChange(value => {
+                meshArray.forEach(SetSegSphereRadius);
+            });
+        folderSizes.add(helixParam, 'segBarGap', 0, 1)
+            .name('Link Spacing')
+            .listen()
+            .onChange(value => {
+                meshArray.forEach(SetSegSphereRadius);
+            });
+
+        const folderSpheres0 = gui.addFolder('Alpha Molecules');
+        folderSpheres0.addColor(helixParam, 'color0start')
+            .name('Start Colour')
+            .listen()
+            .onChange(value => {
+                meshArray.forEach(SetSegColor);
+            });
+        folderSpheres0.addColor(helixParam, 'color0end')
+            .name('End Colour')
+            .listen()
+            .onChange(value => {
+                meshArray.forEach(SetSegColor);
+            });
+
+        const folderSpheres1 = gui.addFolder('Beta Molecules');
+        folderSpheres1.addColor(helixParam, 'color1start')
+            .name('Start Colour')
+            .listen()
+            .onChange(value => {
+                meshArray.forEach(SetSegColor);
+            });
+        folderSpheres1.addColor(helixParam, 'color1end')
+            .name('End Colour')
+            .listen()
+            .onChange(value => {
+                meshArray.forEach(SetSegColor);
+            });
+
+        const folderBars = gui.addFolder('Links');
+        folderBars.addColor(helixParam, 'colorbarstart')
+            .name('Start Colour')
+            .listen()
+            .onChange(value => {
+                meshArray.forEach(SetSegColor);
+            });
+        folderBars.addColor(helixParam, 'colorbarend')
+            .name('End Colour')
+            .listen()
+            .onChange(value => {
+                meshArray.forEach(SetSegColor);
+            });
+
+        const folderRandom = gui.addFolder('Randomisation')
+        folderRandom.add(helixParam, 'randomise')
+            .name('Randomise!');
+        
+
+        // set up mesh array
+        const meshArray = [];
+
+        // creating default geometries
+        var geometry_sphere = new THREE.SphereGeometry(1,8,4);
+        var geometry_bar = new THREE.CylinderGeometry(1,1,1,16);
+
+        // create lights
+        const ambientLight = new THREE.AmbientLight(0xffffff);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
+        dirLight.position.x += 26;
+        scene.add(dirLight);
+
+        // create helix
+        CreateHelix();
+
+        //this function is called when the window is resized
+        var MyResize = function ( )
+            {
+            //get the new sizes
+            var width = window.innerWidth;
+            var height = window.innerHeight;
+            //then update the renderer
+            renderer.setSize(width,height);
+            //and update the aspect ratio of the camera
+            camera.aspect = width/height;
+
+            //update the projection matrix given the new values
+            camera.updateProjectionMatrix();
+
+            //and finally render the scene again
+            renderer.render(scene,camera);
+        };
+
+        // render first frame
+        renderer.render(scene,camera);
+
+        //link the resize of the window to the update of the camera
+        window.addEventListener( 'resize', MyResize);
+        
+        // prepare for update loop
+        var clock = new THREE.Clock();
+        var controls = new OrbitControls( camera, renderer.domElement );
+
+        // update loop
+        var UpdateLoop = function()
+        {
+            var delta = clock.getDelta();
+            t += delta;
+
+            meshArray.forEach(SetSegPos);
+
+            controls.update();
+
+            renderer.render(scene,camera);
+            requestAnimationFrame(UpdateLoop);
+        }
+        requestAnimationFrame(UpdateLoop);
+        
+        // ----- DECLARING FUNCTIONS ----- //
+        // function to create helix meshes and fill the array with them
+        function CreateHelix()
+        {
+            for (var i = 0; i < helixParam.segCount; i++)
+            {
+                // create materials
+                var material_sphere0 = new THREE.MeshLambertMaterial();
+                material_sphere0.color = new THREE.Color(1,1,1);
+
+                var material_sphere1 = new THREE.MeshLambertMaterial();
+                material_sphere1.color = new THREE.Color(1,1,1);
+
+                var material_bar = new THREE.MeshLambertMaterial();
+                material_bar.color = new THREE.Color(1,1,1);
+
+                // spawn spheres and bar
+                var sphere0 = new THREE.Mesh(geometry_sphere,material_sphere0);
+                var sphere1 = new THREE.Mesh(geometry_sphere,material_sphere1);
+                var bar = new THREE.Mesh(geometry_bar,material_bar);
+
+                // add spheres to array and mesh array
+                scene.add(sphere0, sphere1, bar);
+                meshArray[i] = [sphere0, sphere1, bar];
+            }
+            meshArray.forEach(SetSegPos);
+            meshArray.forEach(SetSegSphereRadius);
+            meshArray.forEach(SetSegColor);
+        }
+
+        function SetSegPos(item, i, arr)
+        {
+            var normalisedIndex = (i)/helixParam.segCount;
+            var angleoffset = i*helixParam.rotateOffset;
+
+            // xpos
+            var xPosUpper = (helixParam.length/2);
+            var xPosLower = -xPosUpper;
+            var xPos = lerp(xPosLower,xPosUpper,normalisedIndex);
+
+            // ypos and zpos
+            var angle = (t*helixParam.rotateSpeed) + angleoffset;
+            var yPos0 = Math.sin(angle) * helixParam.radius;
+            var zPos0 = Math.cos(angle) * helixParam.radius;
+            var yPos1 = -yPos0;
+            var zPos1 = -zPos0;
+
+            // apply new positions  to both spheres
+            item[0].position.x = xPos;
+            item[0].position.y = yPos0;
+            item[0].position.z = zPos0;
+            item[0].rotation.x = -angle;
+
+            item[1].position.x = xPos;
+            item[1].position.y = yPos1;
+            item[1].position.z = zPos1;
+            item[1].rotation.x = -angle;
+
+            item[2].position.x = xPos;
+            item[2].rotation.x = -angle - 1.575;
+        }
+
+        function SetSegSphereRadius(item, i, arr)
+        {
+            item[0].scale.x = helixParam.segSphereRadius;
+            item[0].scale.y = helixParam.segSphereRadius;
+            item[0].scale.z = helixParam.segSphereRadius;
+
+            item[1].scale.x = helixParam.segSphereRadius;
+            item[1].scale.y = helixParam.segSphereRadius;
+            item[1].scale.z = helixParam.segSphereRadius;
+
+            item[2].scale.x = helixParam.segBarRadius;
+            item[2].scale.y = 2*((helixParam.radius*helixParam.segBarGap));
+            item[2].scale.z = helixParam.segBarRadius;
+        }
+
+        function SetSegColor(item, i, arr)
+        {
+            var normalisedIndex = (i)/helixParam.segCount;
+            var endCol = new THREE.Color(1,1,1);
+
+            item[0].material.color.set(helixParam.color0start)
+            endCol.set(helixParam.color0end);
+            item[0].material.color.lerp(endCol, normalisedIndex);
+
+            item[1].material.color.set(helixParam.color1start);
+            endCol.set(helixParam.color1end);
+            item[1].material.color.lerp(endCol, normalisedIndex);
+
+            item[2].material.color.set(helixParam.colorbarstart);
+            endCol.set(helixParam.colorbarend);
+            item[2].material.color.lerp(endCol, normalisedIndex);
+        }
+
+        function StabiliseRotationSpeed()
+        {
+            // The entire program breaks when rotateSpeed is 0?????????
+            // So this fixes it with the power of astronomically small numbers
+            if (helixParam.rotateSpeed == 0)
+            {
+                helixParam.rotateSpeed = 1e-69;
+            }
+            // modify t based on the helix's CURRENT rotation with NEW rotation speed.
+            var item = meshArray[0];
+            var angle = Math.asin(item[0].position.y / helixParam.radius);
+            t = angle/helixParam.rotateSpeed;
+        }
+
+        // function to destroy the helix, clear the array, then create a new helix
+        function ResetHelix()
+        {
+            meshArray.forEach(DestroySegmentMeshes);
+            CreateHelix();
+        }
+
+        // function to destroy helix meshes in a specific segment
+        function DestroySegmentMeshes(item, i, arr)
+        {
+            scene.remove(item[0], item[1], item[2]);
+        }
+
+    </script>
+  </body>
+</html>
